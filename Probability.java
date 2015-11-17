@@ -1,4 +1,4 @@
-package org.lueky.hadoop.bayes;
+package org.wordCount;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -30,18 +30,15 @@ public class Probability {
 	private static MultipleOutputs<Text, DoubleWritable> mos;
 
 	// Client
-	public static void main(String[] args) throws Exception {
+	public static void run(Configuration conf) throws Exception {
 
-		Configuration conf = new Configuration();
-		conf.set("mapred.job.tracker", "192.168.190.128:9001");
-		conf.set("mapred.jar", "probability.jar");
+
 		// 读取单词总数，设置到congfiguration中
-		String totalWordsPath = "hdfs://192.168.190.128:9000/user/hadoop/output/totalwords.txt";
-		String wordsInClassPath = "hdfs://192.168.190.128:9000/user/hadoop/mid/wordsFre1/_wordsInClass/wordsInClass-r-00000";
+		String totalWordsPath = conf.get("totalWordsPath");
+//		String wordsInClassPath = conf.get("wordsInClassPath");
 
-		conf.set("wordsInClassPath", wordsInClassPath);
-		// Map<String, Integer> wordsInClassMap = new HashMap<String,
-		// Integer>();//保存每个类别的单词总数
+
+
 
 		// 先读取单词总类别数
 		FileSystem fs = FileSystem.get(URI.create(totalWordsPath), conf);
@@ -58,13 +55,8 @@ public class Probability {
 		LOG.info("------>total = " + total);
 
 		System.out.println("total ==== " + total);
-		/*
-		 * String[] otherArgs = new GenericOptionsParser(conf,
-		 * args).getRemainingArgs();
-		 * 
-		 * if (otherArgs.length != 2) { System.out.println("Usage <in> <out>");
-		 * System.exit(-1); }
-		 */
+		
+		
 		Job job = new Job(conf, "file count");
 
 		job.setJarByClass(Probability.class);
@@ -72,8 +64,8 @@ public class Probability {
 		job.setMapperClass(WordsOfClassCountMapper.class);
 		job.setReducerClass(WordsOfClassCountReducer.class);
 
-		String input = "hdfs://192.168.190.128:9000/user/hadoop/mid/wordsFre";
-		String output = "hdfs://192.168.190.128:9000/user/hadoop/output/probability/";
+		String input = conf.get("wordsOutput");
+		String output = conf.get("freqOutput");
 
 		FileInputFormat.addInputPath(job, new Path(input));
 		FileOutputFormat.setOutputPath(job, new Path(output));
@@ -126,13 +118,9 @@ public class Probability {
 
 			int allWordsInClass = 0;
 			
-			
-			
 
 			for (Map.Entry<String, Map<String, Integer>> entries : baseMap.entrySet()) { // 遍历类别
 				allWordsInClass = filemap.get(entries.getKey());
-				
-				
 				for (Map.Entry<String, Integer> entry : entries.getValue().entrySet()) { // 遍历类别中的单词词频求概率
 					double p = (entry.getValue() + 1.0) / (allWordsInClass + tot);
 
@@ -140,15 +128,17 @@ public class Probability {
 					number.set(p);
 					LOG.info("------>p = " + p);
 					mos.write(new Text(entry.getKey()), number, entries.getKey() /*+ "\\" + entries.getKey()*/);//最后一个参数是为了生成文件夹对应的文件
+
 //					context.write(className, number);
 				}
-				
 			}
 
 		}
 
+		//最后计算类别中不存在单词的概率，每个类别都是一个常数
 		protected void cleanup(Mapper<LongWritable, Text, Text, DoubleWritable>.Context context)
 				throws IOException, InterruptedException {
+			
 			Configuration conf = context.getConfiguration();
 			int tot = Integer.parseInt(conf.get("TOTALWORDS"));
 			for (Map.Entry<String, Integer> entry : filemap.entrySet()) { // 遍历类别

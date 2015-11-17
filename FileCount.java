@@ -1,4 +1,4 @@
-package org.lueky.hadoop.bayes;
+package org.wordCount;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -19,12 +19,11 @@ import org.apache.hadoop.io.IOUtils;
 
 public class FileCount {
 
-	public static void main(String[] args) throws Exception {
-		// Path outputPath = new Path("/user/hadoop/output/priorP/prior.txt");
+	public static void run(Configuration conf) throws Exception {
 
 		int sum = 0;
-		String in = "/user/hadoop/test";
-//		String in = "/user/hadoop/input/NBCorpus/Country";
+		String in = conf.get("input");
+
 
 		Map<String, Integer> map = new HashMap<>();
 		Map<String, Double> priorMap = new HashMap<>();
@@ -48,9 +47,11 @@ public class FileCount {
 		
 		System.out.println("sum = " + sum);
 
-		Configuration conf = new Configuration();
-		FileSystem fs = FileSystem.get(conf);
-		Path outputPath = new Path("/user/hadoop/output/priorP/prior.txt");
+
+		String output = conf.get("priorProbality");
+		
+		Path outputPath = new Path(output);
+		FileSystem fs = outputPath.getFileSystem(conf);
 		FSDataOutputStream outputStream = fs.create(outputPath);
 		
 		//计算每个类别文本占总文本的比率，即先验概率
@@ -76,13 +77,16 @@ public class FileCount {
 
 	// get 方法
 	public static Map<String, Integer> getFileNumber(String folderPath) throws Exception {
-
+	
 		Map<String, Integer> fileMap = new HashMap<>();
 		Configuration conf = new Configuration();
-		FileSystem hdfs = FileSystem.get(conf);
+		
 		Path path = new Path(folderPath);
+		FileSystem hdfs = path.getFileSystem(conf);
 		FileStatus[] status = hdfs.listStatus(path);
-
+//		System.out.println(folderPath);
+//		System.out.println("status.length = " + status.length);
+		
 		for (FileStatus stat : status) {
 			if (stat.isDir()) {
 				int length = hdfs.listStatus(stat.getPath()).length;

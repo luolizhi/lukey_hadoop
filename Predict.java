@@ -1,4 +1,4 @@
-package org.wordCount.predict;
+package org.lukey.hadoop.bayes.trainning;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -26,13 +26,18 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 
+
+/**
+ * 
+ * 输出结果为类名（原始类名）+文件名+类名（分类器计算）
+ * 方便后续统计计算，遍历第一个数据，后面类名相同表示分对了，否则就错了。
+ * 
+ */
 public class Predict {
 	
 	 private static final Log LOG = LogFactory.getLog(Predict.class);
 
-	private static MultipleOutputs<Text, Text> mos;
 
 	static enum counter {// 分别表示待测文本的单词数和类别数
 		words_in_file, class_counte
@@ -53,20 +58,11 @@ public class Predict {
 	// 每次取value累成（需要用log处理）
 	static Map<String, Double> predictMap = new HashMap<String, Double>();
 
-	public static void main(String[] args) throws Exception {
-		Configuration conf = new Configuration();
+	public static int run(Configuration conf) throws Exception  {
+//		Configuration conf = new Configuration();
 		conf.set("mapred.job.tracker", "192.168.190.128:9001");
 		
-		String input = "/user/hadoop/test11";// ???
-		String output = "/user/hadoop/output/Predict";
-		String conditionPath = "/user/hadoop/output/probability";
-		String priorPath = "/user/hadoop/output/priorP/priorProbality.txt";
-
-		String notFoundPath = "/user/hadoop/output/probability/_notFound/notFound-m-00000";
-		conf.set("conditionPath", conditionPath);
-		conf.set("priorPath", priorPath);
-		conf.set("notFoundPath", notFoundPath);
-	
+		
 
 		Job job = new Job(conf, "predict");
 		job.setJarByClass(Predict.class);
@@ -81,12 +77,15 @@ public class Predict {
 
 		// WholeFileInputFormat.addInputPath(job, new Path(input));
 
-		List<Path> paths = getSecondDir(conf, input);
+		String testInput = conf.get("testInput");
+		
+		List<Path> paths = getSecondDir(conf, testInput);
 		for (Path path : paths) {
 			WholeFileInputFormat.addInputPath(job, path);
 		}
 
-		FileOutputFormat.setOutputPath(job, new Path(output));
+		String testOutput = conf.get("testOutput");
+		FileOutputFormat.setOutputPath(job, new Path(testOutput));
 
 		int exitCode = job.waitForCompletion(true) ? 0 : 1;
 
@@ -95,7 +94,7 @@ public class Predict {
 		Counter c1 = counters.findCounter(counter.class_counte);
 		System.out.println(c1.getDisplayName() + " : " + c1.getValue());
 
-		System.exit(exitCode);
+		return exitCode;
 
 	}
 
@@ -108,7 +107,9 @@ public class Predict {
 			FileSplit split = (FileSplit) context.getInputSplit();
 			Path file = split.getPath();
 			String fileName = file.getName(); // 得到文件名，输出的时候写入context
-
+			String claName = file.getParent().getName().toString();
+			
+			
 			// 遍历preditMap如果对应的类别含有该单词value就称其概率，否在乘以notFoundMap里面的概率
 			/* Map<String, Map<String, Double>> conditionMap */
 
@@ -119,7 +120,7 @@ public class Predict {
 				LOG.info(className + "------->" + p);
 //				System.out.println(className + "------->" + p);
 				Text prob = new Text(className + "\t" + p);
-				context.write(new Text(fileName), prob);
+				context.write(new Text(claName + "\t"+ fileName), prob);
 
 			}
 
@@ -155,7 +156,7 @@ public class Predict {
 			Configuration conf = context.getConfiguration();
 			FileSystem fs = null;
 			// 读取先验概率
-			String priorPath = conf.get("priorPath");
+			String priorPath = conf.get("priorProbality");
 			fs = FileSystem.get(URI.create(priorPath), conf);
 			FSDataInputStream inputStream = fs.open(new Path(priorPath));
 			BufferedReader buffer = new BufferedReader(new InputStreamReader(inputStream));
@@ -178,7 +179,8 @@ public class Predict {
 			// 读取条件概率
 			String conditionPath = conf.get("conditionPath");
 			Path condPath = new Path(conditionPath);
-			fs = FileSystem.get(URI.create(conditionPath), conf);
+			fs = condPath.getFileSystem(conf);
+//			fs = FileSystem.get(URI.create(conditionPath), conf);
 			FileStatus[] stats = fs.listStatus(condPath);
 			for (FileStatus stat : stats) {
 				if (!stat.isDir()) {
@@ -190,7 +192,8 @@ public class Predict {
 
 						// 根据文件路径读取文件里面内容保存到map
 						Map<String, Double> oneMap = new HashMap<>();
-						fs = FileSystem.get(URI.create(fileName.toString()), conf);
+						fs = filePath.getFileSystem(conf);
+//						fs = FileSystem.get(URI.create(fileName.toString()), conf);
 						FSDataInputStream fileStream = fs.open(filePath);
 						BufferedReader fileBuffer = new BufferedReader(new InputStreamReader(fileStream));
 						while ((strLine = fileBuffer.readLine()) != null) {
@@ -226,36 +229,23 @@ public class Predict {
 			for (Text value : values) {
 				String[] temp = value.toString().split("\t");
 				double p = Double.parseDouble(temp[1]);
-				System.out.println(maxClass);
-//				p = Math.max(p, maxP);
+
 				if (p > maxP) {
 					maxP = p;
 					maxClass = temp[0];
 				}
 			}
-			// context.write(key, new Text(maxClass));
-			mos.write(key, new Text(maxClass), maxClass + "\\" + maxClass);
+			context.write(key, new Text(maxClass));
 		}
 
-		@Override
-		protected void cleanup(Reducer<Text, Text, Text, Text>.Context context)
-				throws IOException, InterruptedException {
-
-			mos.close();
-		}
-
-		@Override
-		protected void setup(Reducer<Text, Text, Text, Text>.Context context) throws IOException, InterruptedException {
-
-			mos = new MultipleOutputs<Text, Text>(context);
-		}
 
 	}
 
 	// 获取文件夹下面二级文件夹路径的方法
 	static List<Path> getSecondDir(Configuration conf, String folder) throws Exception {
-		FileSystem fs = FileSystem.get(conf);
+		
 		Path path = new Path(folder);
+		FileSystem fs = path.getFileSystem(conf);
 		FileStatus[] stats = fs.listStatus(path);
 		List<Path> folderPath = new ArrayList<Path>();
 		for (FileStatus stat : stats) {
@@ -267,5 +257,7 @@ public class Predict {
 
 		return folderPath;
 	}
+
+
 
 }

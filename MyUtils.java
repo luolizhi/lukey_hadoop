@@ -1,4 +1,4 @@
-package org.wordCount;
+package org.lukey.hadoop.bayes.trainning;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +14,8 @@ public class MyUtils {
 
 	// 获取文件夹下面二级文件夹路径的方法
 		static List<Path> getSecondDir(Configuration conf, String folder) throws Exception {
-//			System.out.println("----getSencondDir----" + folder);
+//			System.out.println("-2---getSencondDir----" + folder);
+			int FILENUMBER = conf.getInt("FILENUMBER", 10);
 			Path path = new Path(folder);
 			
 			FileSystem fs = path.getFileSystem(conf);
@@ -24,7 +25,7 @@ public class MyUtils {
 			for (FileStatus stat : stats) {
 				if (stat.isDir()) {
 //					System.out.println("----stat----" + stat.getPath());
-					if (fs.listStatus(stat.getPath()).length > 10) { // 筛选出文件数大于10个的类别作为
+					if (fs.listStatus(stat.getPath()).length > FILENUMBER) { // 筛选出文件数大于FILENUMBER的类别作为
 																		// 输入路径
 						folderPath.add(stat.getPath());
 					}

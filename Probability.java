@@ -1,4 +1,4 @@
-package org.wordCount;
+package org.lukey.hadoop.bayes.trainning;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -25,47 +25,28 @@ import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 
 public class Probability {
 
+	//试着用LOG打印调试信息
 	private static final Log LOG = LogFactory.getLog(FileInputFormat.class);
-	public static int total = 0;
+	public static int total = 0;	//所有类中单词的总类别数
 	private static MultipleOutputs<Text, DoubleWritable> mos;
 
-	// Client
-	public static void run(Configuration conf) throws Exception {
-
-
-		// 读取单词总数，设置到congfiguration中
-		String totalWordsPath = conf.get("totalWordsPath");
-//		String wordsInClassPath = conf.get("wordsInClassPath");
-
-
-
+	public static int run(Configuration conf) throws Exception {
 
 		// 先读取单词总类别数
-		FileSystem fs = FileSystem.get(URI.create(totalWordsPath), conf);
-		FSDataInputStream inputStream = fs.open(new Path(totalWordsPath));
-		BufferedReader buffer = new BufferedReader(new InputStreamReader(inputStream));
-		String strLine = buffer.readLine();
-		String[] temp = strLine.split(":");
-		if (temp.length == 2) {
-			// temp[0] = TOTALWORDS
-			conf.set(temp[0], temp[1]);// 设置两个String
-		}
-
-		total = Integer.parseInt(conf.get("TOTALWORDS"));
+		total = conf.getInt("TOTALWORDS", 0);
 		LOG.info("------>total = " + total);
 
 		System.out.println("total ==== " + total);
-		
-		
-		Job job = new Job(conf, "file count");
+			
+		Job job = new Job(conf, "probability");
 
 		job.setJarByClass(Probability.class);
 
-		job.setMapperClass(WordsOfClassCountMapper.class);
-		job.setReducerClass(WordsOfClassCountReducer.class);
+		job.setMapperClass(ProbMapper.class);
+		job.setReducerClass(ProbReducer.class);
 
 		String input = conf.get("wordsOutput");
-		String output = conf.get("freqOutput");
+		String output = conf.get("conditionPath");
 
 		FileInputFormat.addInputPath(job, new Path(input));
 		FileOutputFormat.setOutputPath(job, new Path(output));
@@ -73,12 +54,13 @@ public class Probability {
 		job.setOutputKeyClass(Text.class);
 		job.setOutputValueClass(DoubleWritable.class);
 
-		System.exit(job.waitForCompletion(true) ? 0 : 1);
+		int exitCode = job.waitForCompletion(true) ? 0 : 1;
+		return exitCode;
 
 	}
 
 	// Mapper
-	static class WordsOfClassCountMapper extends Mapper<LongWritable, Text, Text, DoubleWritable> {
+	static class ProbMapper extends Mapper<LongWritable, Text, Text, DoubleWritable> {
 
 		private static DoubleWritable number = new DoubleWritable();
 		private static Text className = new Text();
@@ -153,7 +135,7 @@ public class Probability {
 
 		protected void setup(Mapper<LongWritable, Text, Text, DoubleWritable>.Context context)
 				throws IOException, InterruptedException {
-			// TODO Auto-generated method stub
+			
 			Configuration conf = context.getConfiguration();
 			mos = new MultipleOutputs<Text, DoubleWritable>(context);
 			String filePath = conf.get("wordsInClassPath");
@@ -170,7 +152,7 @@ public class Probability {
 	}
 
 	// Reducer
-	static class WordsOfClassCountReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
+	static class ProbReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
 
 		// result 表示每个文件里面单词个数
 		DoubleWritable result = new DoubleWritable();

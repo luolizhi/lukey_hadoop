@@ -1,4 +1,4 @@
-package org.wordCount.predict;
+package org.lukey.hadoop.bayes.trainning;
 
 import java.io.IOException;
 
